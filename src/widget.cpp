@@ -6,9 +6,9 @@ Widget::Widget(QWidget *parent)
     sign_object_num=0;
     index=-1;
 
-//    vec_sign_obj={};
-    this->setWindowTitle("图片标记软件");
-//    this->setFixedSize(1200,800);
+    this->setWindowTitle("Images Label");
+    this->setWindowIcon(QIcon(":/images/app.ico"));
+    this->setStyleSheet("background-color:rgb(211,211,211);");  //设置整个窗口的背景颜色；
     this->resize(1000,700);  //控制大小，但是大小可以调节；
     this->setStyle(QStyleFactory::create("Fusion"));
 
@@ -49,17 +49,21 @@ Widget::Widget(QWidget *parent)
     left_layout->addLayout(left_bottom_layout);
 
 //end **********************************************************
-    QFont font("ZYSong", 15);
+    QFont font("ZYSong", 13);
     QHBoxLayout *mid_layout=new QHBoxLayout(this);
 
-//    imgVision=new QLabel(this);
-    imgVision=new myLable(this);
+    WidgetVision=new QFrame(this);
+    WidgetVision->setFrameStyle(QFrame::Box | QFrame::Raised);
+    WidgetVision->resize(int(this->width()*0.8),int(this->height()*0.9));
+    frame_layout=new QGridLayout(WidgetVision);
 
-    imgVision->setFrameStyle(QFrame::Box | QFrame::Raised);
-    imgVision->resize(int(this->width()*0.8),int(this->height()*0.9));
-    imgVision->setFont(font);
-    imgVision->setAlignment(Qt::AlignCenter);
-    mid_layout->addWidget(imgVision);
+//    imgVision=nullptr;
+    imgVision=new myLable(this);
+    imgVision->hide();
+    frame_layout->addWidget(imgVision);
+    connect(this,SIGNAL(remove_draw_signal()),imgVision,SLOT(remove_draw_slots()));
+
+    mid_layout->addWidget(WidgetVision);
 
 
 //begin *******************右边界面设计部分***********************
@@ -91,19 +95,12 @@ Widget::Widget(QWidget *parent)
     signObject->setText("标记目标内容：");
     signObject->setFont(font);
 
-    right_temp_layout=new QVBoxLayout(this);
-    assert(sign_object_num==vec_sign_obj.size());
-    QFont font_temp("ZYSong", 12);
-    for(int i=0;i<sign_object_num;++i){
-        QLabel *temp=new QLabel(this);
-        temp->setFixedSize(200,30);
-        temp->setText(vec_sign_obj.at(i));
-        temp->setFont(font);
-        right_temp_layout->addWidget(temp);
-    }
+    signVersion=new QLabel(this);
+    signVersion->setFont(font);
+    signVersion->hide();
 
     right_mid_layout->addWidget(signObject);
-    right_mid_layout->addLayout(right_temp_layout);
+    right_mid_layout->addWidget(signVersion);
 
     right_mid_2_layout->addLayout(right_top_layout);
     right_mid_2_layout->addLayout(right_mid_layout);
@@ -116,7 +113,7 @@ Widget::Widget(QWidget *parent)
     save=new QPushButton("保存(S)",this);
     save->setFixedSize(60,40);
     save->setStyleSheet("color:white;background-color: gray;");
-//    right_bootom_layout->addStretch(0);
+
     right_bootom_layout->addWidget(remove);
     right_bootom_layout->addWidget(save);
 
@@ -131,26 +128,27 @@ Widget::Widget(QWidget *parent)
     main_layout->setSpacing(10);
     main_layout->addLayout(right_layout);
 
-    SW=new Setting_Widget();
+//    SW=new Setting_Widget();
 
+    WW=new warning_widget();
+    WW->hide();
 
 
     connect(setting,SIGNAL(clicked()),this,SLOT(start_setting()));
-    connect(SW,SIGNAL(test(int,QVector<QString>)), this, SLOT(return_lineText()));
     connect(opendir,SIGNAL(clicked()),this,SLOT(opendier_slots()));
     connect(previous,SIGNAL(clicked()),this,SLOT(previous_button_slots()));
     connect(next,SIGNAL(clicked()),this,SLOT(next_button_slots()));
     connect(remove,SIGNAL(clicked()),this,SLOT(remove_button_slots()));
     connect(save,SIGNAL(clicked()),this,SLOT(save_buttion_slots()));
-
-//    connect(this,SIGNAL(remove_button_slots()))
 }
 
 Widget::~Widget()
 {
-    delete SW;
+    if(SW!=nullptr){
+        delete SW;
+    }
     delete imgVision;
-    //    delete painter;
+    delete WW;
 }
 
 void Widget::keyPressEvent(QKeyEvent *event)
@@ -168,6 +166,9 @@ void Widget::keyPressEvent(QKeyEvent *event)
     case Qt::Key_S:
         save_buttion_slots();
         break;
+    case Qt::Key_Delete:
+        del_img();
+        break;
     default:
         break;
 
@@ -176,9 +177,9 @@ void Widget::keyPressEvent(QKeyEvent *event)
 }
 
 void Widget::start_setting(){
-//    Setting_Widget *SW=new Setting_Widget();
-//    SW->show();
+    SW=new Setting_Widget();
     SW->show();
+    connect(SW,SIGNAL(test(int,QVector<QString>)), this, SLOT(return_lineText()));
 }
 
 void Widget::return_lineText()
@@ -188,19 +189,17 @@ void Widget::return_lineText()
 
     signNumber->setText("标记目标数："+QString::number(sign_object_num));
 
-//    right_temp_layout=new QVBoxLayout(this);
-    assert(sign_object_num==vec_sign_obj.size());
-    QFont font_temp("ZYSong", 15);
+    signVersion->setFixedSize(200,40*(sign_object_num));
+
+    QString text_version="";
     for(int i=0;i<sign_object_num;++i){
-        QLabel *temp=new QLabel(this);
-        temp->setFixedSize(200,30);
-        temp->setText(vec_sign_obj.at(i));
-        temp->setFont(font_temp);
-        right_temp_layout->addWidget(temp);
+        text_version+=(vec_sign_obj.at(i)+"\n");
     }
+    //qDebug()<<text_version;
+    signVersion->setText(text_version);
+    signVersion->show();
 
-
-    SW->hide();
+    delete SW;
 }
 
 void Widget::opendier_slots()
@@ -228,14 +227,19 @@ void Widget::opendier_slots()
 
 void Widget::previous_button_slots()
 {
-    save_buttion_slots();
+    bool tag=save_buttion_slots();
 
-    if(index<=0){
+    if(index==0){
 //        qDebug()<<"\a";
+        warning_wid("已经是第一张了");
         return;
     }
-    index--;
-    ImageNum->setText("标记目标数："+QString::number(index+1));
+
+    if(tag){
+        index--;
+    }
+
+    ImageNum->setText("已标记张数："+QString::number(index+1));
     QString img_path=file_dir+"/"+list.at(index).fileName();
     readImage(img_path);
     if(ImageisTag()){
@@ -247,10 +251,20 @@ void Widget::previous_button_slots()
 
 void Widget::next_button_slots()
 {
-    save_buttion_slots();
+
+    if(index==-1){
+        if(img_filter()==1){
+            warning_wid("已经是最后一张图片了！");
+            return;
+        }else if(index>=0){
+             next->setText("下一张(D)");
+        }
+    }
+
+    bool tag=save_buttion_slots();
 
     if(sign_object_num==0||sign_object_num!=vec_sign_obj.size()){
-        imgVision->setText("设置出错，请检查！");
+        warning_wid("设置出错，请检查！");
         return;
     }
 
@@ -258,12 +272,15 @@ void Widget::next_button_slots()
         return;
     }
 
-    if(index>=list.size()){
-        imgVision->setText("以及是最后一张图片了！");
+    if((index+1)>=list.size()){
+        warning_wid("已经是最后一张图片了！");
         return;
     }
 
-    index++;
+    if(tag){
+        index++;
+    }
+
     ImageNum->setText("标记目标数："+QString::number(index+1));
     if(index==0){
         next->setText("下一张(D)");
@@ -280,20 +297,38 @@ void Widget::next_button_slots()
 
 void Widget::remove_button_slots()
 {
-    imgVision->draw_point_vec.pop_back();
+    if(imgVision!=nullptr){
+        emit(remove_draw_signal());
+    }
 }
 
-void Widget::save_buttion_slots()
+bool Widget::save_buttion_slots()
 {
-    if(!imgVision->draw_point_vec.empty()){
+    if(imgVision==nullptr){
+        return true;
+    }
+
+    vec_draw=imgVision->get_vec_draw();
+    imgVision->clear_vec_draw();
+//    delete imgVision;
+    if(!vec_draw.empty()){
+        if(int(vec_draw.size())!=sign_object_num){
+            warning_wid("标记目标数不正确！");
+            vec_draw.clear();
+            return false;
+        }
         QDir dir;
         dir.cd(file_dir);
         if(!dir.exists("annotation")){
             dir.mkdir("annotation");
-            XML_file_save_path=file_dir+"/annotation";
         }
+        XML_file_save_path=file_dir+"/annotation";
         write_xml();
-        imgVision->draw_point_vec.clear();
+        vec_draw.clear();
+        return true;
+    }
+    else{
+        return true;
     }
 }
 
@@ -301,10 +336,11 @@ void Widget::readImage(QString img_path)
 {
 
     img=new QImage;
+    imgVision->show();
     if(!img->load(img_path)){
         imgVision->setText("不是图片，请点击下一张");
     }else{
-        imgVision->resize(img->size());
+        imgVision->setFixedSize(img->size());
         imgVision->setPixmap(QPixmap::fromImage(*img));
     }
     delete img;
@@ -330,6 +366,10 @@ bool Widget::ImageisTag()
 
 void Widget::write_xml()
 {
+    if(vec_draw.size()!=sign_object_num){
+        warning_wid("标记目标数不正确！");
+        return;
+    }
     QString xml_name=XML_file_save_path+"/"+list.at(index).fileName()+".xml";
     QFile file(xml_name);
     if (!file.open(QFile::WriteOnly | QFile::Text)) { // 只写模式打开文件
@@ -342,16 +382,97 @@ void Widget::write_xml()
     writer.writeStartDocument();
     writer.writeStartElement("Anontations");
 
-    assert(imgVision->draw_point_vec.size()==sign_object_num);
-    for(int i=0;i<sign_object_num;++i){
+//    assert(imgVision->draw_point_vec.size()==sign_object_num);
+    for(unsigned int i=0;i<sign_object_num;++i){
         writer.writeStartElement(vec_sign_obj.at(i));
-        writer.writeTextElement("x",QString::number(imgVision->draw_point_vec.at(i).x));
-        writer.writeTextElement("y",QString::number(imgVision->draw_point_vec.at(i).y));
-        writer.writeTextElement("w",QString::number(imgVision->draw_point_vec.at(i).w));
-        writer.writeTextElement("h",QString::number(imgVision->draw_point_vec.at(i).h));
+        writer.writeTextElement("x",QString::number(vec_draw.at(i).x));
+        writer.writeTextElement("y",QString::number(vec_draw.at(i).y));
+        writer.writeTextElement("w",QString::number(vec_draw.at(i).w));
+        writer.writeTextElement("h",QString::number(vec_draw.at(i).h));
         writer.writeEndElement();
     }
     writer.writeEndElement();
     writer.writeEndDocument();
     file.close();
+}
+
+void Widget::warning_wid(QString str)
+{
+    qDebug()<<"yyeyeyeyeyye";
+    WW->setText(str);
+}
+
+void Widget::del_img()
+{
+//    index=2;
+//    QFileInfoList::iterator it=list.begin();
+
+//    for(auto i:list){
+//        qDebug()<<i;
+//    }
+
+//    qDebug()<<"*****************************";
+
+//    list.erase(it+index);
+
+//    for(auto i:list){
+//        qDebug()<<i;
+//    }
+
+
+    QString del_img_name=file_dir+"/"+list.at(index).fileName();
+    QFile fi(del_img_name);
+    if(fi.exists()){
+        fi.remove();
+    }else{
+        return;
+    }
+
+    if(index==0){
+        next->setText("下一张(D)");
+        QFileInfoList::iterator it=list.begin();
+        list.erase(it+index);
+    }else if(index==list.size()-1){
+        QFileInfoList::iterator it=list.begin();
+        list.erase(it+index);
+        index--;
+    }else{
+        QFileInfoList::iterator it=list.begin();
+        list.erase(it+index);
+    }
+
+    QString img_path=file_dir+"/"+list.at(index).fileName();
+    readImage(img_path);
+    if(ImageisTag()){
+        isTag->setText("已标记");
+    }else{
+        isTag->setText("未标记");
+    }
+}
+
+int Widget::img_filter()
+{
+    QDir dir;
+    dir.cd(file_dir);
+    if(!dir.exists("annotation")){
+        return 0;
+    }
+
+    QString xml_file_path=file_dir+"/annotation/";
+
+    while(index<list.size()){
+        index++;
+        QString img_name=list.at(index).fileName();
+        QString xml_name=img_name+".xml";
+        QFile file(xml_file_path+xml_name);
+        if(!file.exists()){
+            index--;
+            break;
+        }
+    }
+    if(index<(list.size()-1)){
+        return 0;
+    }else if(index>=(list.size()-1)){
+        return 1;
+    }
 }
